@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <helper_cuda.h>
 #include <helper_timer.h>
+#include <math.h>
 
 #define BLOCK_SIZE 32
 
@@ -38,7 +39,8 @@ __global__ void SumVectorA(vector A, vector B, vector C, unsigned int n, int com
   // Each thread will compute the sum of 'comp' consecutive components of the vectors
   int i = (blockIdx.x * blockDim.x + threadIdx.x) * comp;
 
-  for (int j = 0; j < comp; j++)
+  // check that we do not access out of bounds elements
+  for (int j = 0; j < comp && i + j < n; j++)
     C[i + j] = A[i + j] + B[i + j];
 }
 
@@ -120,8 +122,10 @@ int main(int argc, char **argv)
   checkCudaErrors(cudaMemcpy(dB, hB, size, cudaMemcpyHostToDevice));
 
   // Setup execution parameters
-  dim3 threads(BLOCK_SIZE / comp); // number of threads per block (each thread computes 'comp' components)
-  dim3 grid(n / BLOCK_SIZE);       // number of blocks in the grid
+  // number of threads per block (each thread computes 'comp' components, so we need BLOCK_SIZE/comp threads per block)
+  dim3 threads((int)ceil((float)BLOCK_SIZE / comp));
+  // number of blocks in the grid (each block computes BLOCK_SIZE components, so we need n/BLOCK_SIZE blocks)
+  dim3 grid((int)ceil((float)n / BLOCK_SIZE));
 
   // Timers
   sdkCreateTimer(&kTimer);
