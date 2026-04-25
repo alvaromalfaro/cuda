@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "CUDA-Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/local/cuda/include",
+                "/usr/local/cuda/targets/x86_64-linux/include",
+                "/usr/include/c++/13",
+                "/usr/include/x86_64-linux-gnu/c++/13",
+                "/usr/include"
+            ],
+            "defines": [
+                "__CUDACC__",
+                "__CUDA_ARCH__=800"
+            ],
+            "compilerPath": "/usr/local/cuda/bin/nvcc",
+            "cudaPath": "/usr/local/cuda",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+                "-ccbin",
+                "/usr/bin/g++"
+            ]
+        }
+    ],
+    "version": 4
+}

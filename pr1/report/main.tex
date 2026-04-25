@@ -1,0 +1,79 @@
+% --------------------------------------------------------------
+% Paquetes, configuración del documento, ...
+% --------------------------------------------------------------
+ 
+\documentclass[12pt]{article}
+ 
+\usepackage[margin=1in]{geometry} 
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{hyperref}
+ 
+% \newcommand{\N}{\mathbb{N}}
+% \newcommand{\Z}{\mathbb{Z}}
+ 
+\newenvironment{exercise}[2][Ejercicio]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}\hskip \labelsep {\bfseries #2.}]}{\end{trivlist}}
+ 
+\begin{document}
+
+% --------------------------------------------------------------
+%                  Zona de ejercicios/trabajo
+% --------------------------------------------------------------
+
+\title{Práctica 3 - Organización de \textit{threads} y patrones de acceso a memoria}
+\author{Álvaro Martínez Alfaro\\
+    Aceleradores Gráficos}
+
+\maketitle
+
+\begin{exercise}{1}
+    Implementación paralela con CUDA de la suma de dos vectores de $n$ números enteros, usando la
+    memoria global de la GPU. Se proporciona un programa secuencial de la suma de vectores. El
+    acceso a los vectores se producirá de acuerdo a dos patrones diferentes:
+    \begin{enumerate}[label=\alph*)]
+        \item Cada thread procesa $m$ componentes consecutivas de los vectores.
+        \item Cada thread procesa $m$ componentes de los vectores separadas una determinada
+              distancia.
+    \end{enumerate}
+    El alumno debe obtener dos kernels, uno para cada caso, y probar su correcto funcionamiento.
+    Para esta primera parte se puede usar cualquier valor de $n$ y $m$, aunque es recomendable
+    probar con varios. Para tamaños grandes de los vectores, se comprobará la corrección de los
+    kernels comparando el vector suma resultado con el obtenido con la versión secuencial.
+\end{exercise}
+
+\begin{exercise}{2}
+    Análisis estático de los dos kernels (sin realizar pruebas con ellos), desde el punto de vista
+    del patrón de acceso a memoria. Para ello se debe estudiar la coalescencia y la localidad, y
+    razonar sobre cuál de los kernels tendrá mejor rendimiento. El análisis se debe hacer teniendo
+    en cuenta el valor de $m$, considerando diferentes valores de $m$ (desde pequeños a grandes, por
+    ejemplo).
+\end{exercise}
+
+\begin{exercise}{3}
+    Análisis dinámico, es decir, haciendo pruebas. Será la forma de comprobar el rendimiento real de
+    los kernels, y comparar con los resultados del apartado 2.
+
+    Para cada kernel, se buscará la mejor configuración de threads y bloques de threads. Para ello
+    se debe variar el número de threads total (variando $m$, con valores $1$, $64$ y $256$) y el
+    número de threads por bloque ($16$, $32$, $64$, $128$ y $256$).
+
+    En las pruebas se considerará lo siguiente:
+    \begin{itemize}
+        \item 10 tamaños de los vectores (número de componentes $n$): entre $2^{16}$ y $2^{25}$.
+        \item 10 ejecuciones para cada prueba.
+        \item Datos de tiempo total de ejecución y tiempo debido sólo al kernel.
+    \end{itemize}
+
+    Se deben generar gráficas (y tablas) con los datos de tiempo medido, en las que se comparen los
+    resultados para los dos kernels, realizando un análisis de rendimiento a partir de los mismos.
+    Además, se compararán esos tiempos con el tiempo del código secuencial.
+
+    Para comprender los resultados que se obtienen, se deben observar también los accesos a memoria,
+    para lo cual se usará la aplicación \textit{ncu} de NVIDIA.
+\end{exercise}
+
+\end{document}

@@ -6,8 +6,6 @@
 #include <helper_timer.h>
 #include <math.h>
 
-#define BLOCK_SIZE 32
-
 typedef int *vector;
 
 // Timers: kernel and application
@@ -50,8 +48,12 @@ __global__ void SumVectorB(vector A, vector B, vector C, unsigned int n, int com
   // positions
   int i = blockIdx.x * blockDim.x * comp + threadIdx.x;
 
-  for (int j = 0; j < comp; j++)
-    C[i + j * dist] = A[i + j * dist] + B[i + j * dist];
+  if (i >= n) return;
+  for (int j = 0; j < comp; j++) {
+    int idx = i + j * dist;
+    if (idx < n)
+      C[idx] = A[idx] + B[idx];
+  }
 }
 
 // ------------------------
@@ -63,23 +65,25 @@ int main(int argc, char **argv)
   unsigned int n, size;
   float timerValue;
   double ops;
-  int comp;    // number of components per thread
-  char kernel; // kernel to execute
-  int debug;   // debug mode
+  int comp;       // number of components per thread
+  char kernel;    // kernel to execute
+  int debug;      // debug mode
+  int block_size; // threads per block
 
-  if (argc == 5)
+  if (argc == 6)
   {
     n = atoi(argv[1]);
     comp = atoi(argv[2]);
     kernel = argv[3][0];
     debug = atoi(argv[4]);
+    block_size = atoi(argv[5]);
   }
   else
   {
-    printf("Sintaxis: <ejecutable> <tamaño de los vectores> <num. de componentes por hilo> <kernel> <debug>\n");
+    printf("Sintaxis: <ejecutable> <n> <comp> <kernel> <debug> <block_size>\n");
     printf("\t- <kernel>: a o b\n");
     printf("\t- <debug>: 0 o 1\n");
-    printf("Ejemplo: ./sumVectors 1024 1 a 0\n");
+    printf("Ejemplo: ./sumVectors 1024 1 a 0 32\n");
     exit(0);
   }
 
@@ -122,10 +126,8 @@ int main(int argc, char **argv)
   checkCudaErrors(cudaMemcpy(dB, hB, size, cudaMemcpyHostToDevice));
 
   // Setup execution parameters
-  // number of threads per block (each thread computes 'comp' components, so we need BLOCK_SIZE/comp threads per block)
-  dim3 threads((int)ceil((float)BLOCK_SIZE / comp));
-  // number of blocks in the grid (each block computes BLOCK_SIZE components, so we need n/BLOCK_SIZE blocks)
-  dim3 grid((int)ceil((float)n / BLOCK_SIZE));
+  dim3 threads(block_size);
+  dim3 grid((int)ceil((float)n / ((float)block_size * comp)));
 
   // Timers
   sdkCreateTimer(&kTimer);
@@ -137,7 +139,7 @@ int main(int argc, char **argv)
     SumVectorA<<<grid, threads>>>(dA, dB, dC, n, comp);
   else if (kernel == 'b')
   {
-    int dist = BLOCK_SIZE / comp; // distance between components computed by the same thread
+    int dist = block_size; // stride = threads per block, so each block covers block_size*comp elements
     SumVectorB<<<grid, threads>>>(dA, dB, dC, n, comp, dist);
   }
   else

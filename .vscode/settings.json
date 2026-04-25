@@ -1,0 +1,12 @@
+{
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "XeLaTeX * 2 (Workspace Override)",
+            "tools": [
+                "xelatex",
+                "xelatex"
+            ]
+        }
+    ],
+    "latex-workshop.latex.recipe.default": "XeLaTeX * 2 (Workspace Override)"
+}
