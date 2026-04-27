@@ -48,12 +48,10 @@ __global__ void SumVectorB(vector A, vector B, vector C, unsigned int n, int com
   // positions
   int i = blockIdx.x * blockDim.x * comp + threadIdx.x;
 
-  if (i >= n) return;
-  for (int j = 0; j < comp; j++) {
-    int idx = i + j * dist;
-    if (idx < n)
-      C[idx] = A[idx] + B[idx];
-  }
+  if (i >= n)
+    return;
+  for (int j = 0; j < comp && i + j * dist < n; j++)
+    C[i + j * dist] = A[i + j * dist] + B[i + j * dist];
 }
 
 // ------------------------
