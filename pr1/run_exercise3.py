@@ -462,7 +462,7 @@ def plot_summary(rows):
     bs_colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(BLOCK_SIZES)))
 
     # ── Figure 1: time scaling ────────────────────────────────────────────────
-    # 2 rows (kernel A/B) × 3 cols (m=1,64,256). Lines = block_sizes + seq ref.
+    # 2 rows (kernel A/B) x 3 cols (m=1,64,256). Lines = block_sizes + seq ref.
     fig, axes = plt.subplots(2, 3, figsize=(14, 8), sharex=True)
     fig.suptitle("Kernel time vs n — all configurations", fontsize=11)
 
@@ -499,11 +499,11 @@ def plot_summary(rows):
     plt.close(fig)
 
     # ── Figure 2: configuration heatmaps ─────────────────────────────────────
-    # 2 rows (kernel A/B) × 2 cols (kernel time / total time).
-    # Each cell: heatmap of comp (rows) × block_size (cols), avg over large n.
+    # 2 rows (kernel A/B) x 2 cols (kernel time / total time).
+    # Each cell: heatmap of comp (rows) x block_size (cols), avg over large n.
     large_n = N_VALUES[len(N_VALUES) // 2:]   # upper half of n values
     fig, axes = plt.subplots(2, 2, figsize=(10, 7))
-    fig.suptitle("Average time heatmap (comp × threads/block)", fontsize=11)
+    fig.suptitle("Average time heatmap (comp x threads/block)", fontsize=11)
 
     for row_i, kernel in enumerate(KERNELS):
         for col_i, (avg, metric) in enumerate([(avg_kt, "Kernel time (s)"),

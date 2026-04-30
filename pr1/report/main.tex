@@ -7,10 +7,32 @@
 \usepackage[margin=1in]{geometry} 
 \usepackage{amsmath,amsthm,amssymb}
 \usepackage[spanish]{babel}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{enumitem}
 \usepackage{hyperref}
+\usepackage{listings}
+\addto\captionsspanish{\renewcommand{\lstlistingname}{Listado}}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!70!black}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{orange!80!black},
+    backgroundcolor=\color{gray!8},
+    frame=single,
+    framerule=0.4pt,
+    rulecolor=\color{gray!40},
+    breaklines=true,
+    captionpos=b,
+    xleftmargin=8pt,
+    xrightmargin=8pt,
+    morekeywords={__global__, blockIdx, blockDim, threadIdx},
+}
  
 % \newcommand{\N}{\mathbb{N}}
 % \newcommand{\Z}{\mathbb{Z}}
@@ -43,6 +65,141 @@
     Para esta primera parte se puede usar cualquier valor de $n$ y $m$, aunque es recomendable
     probar con varios. Para tamaños grandes de los vectores, se comprobará la corrección de los
     kernels comparando el vector suma resultado con el obtenido con la versión secuencial.
+
+    \begin{center}
+        \noindent\rule{4cm}{0.2pt}
+    \end{center}
+
+    Se han implementado dos kernels CUDA, \texttt{SumVectorA} y \texttt{SumVectorB}, ambos
+    calculando $C = A + B$ sobre vectores de $n$ enteros almacenados en memoria global de la GPU.
+    La configuración de ejecución es común a los dos kernels: cada bloque contiene \texttt{block\_size}
+    threads, y el número de bloques se calcula como $\lceil n\,/\,(\texttt{block\_size} \cdot m) \rceil$,
+    de forma que el total de threads cubre exactamente los $n$ elementos repartiendo $m$ elementos
+    por thread.
+
+    \subsubsection*{Kernel \texttt{SumVectorA}: acceso a componentes consecutivas}
+
+    Para el kernel \texttt{SumVectorA}, cada thread tiene asignado un rango de $m$ posiciones
+    contiguas del vector. El índice de inicio se calcula a partir del identificador global del thread:
+    %
+    \begin{equation}
+        i = (\texttt{blockIdx.x} \cdot \texttt{blockDim.x} + \texttt{threadIdx.x}) \cdot m
+    \end{equation}
+    %
+    El thread accede así a los elementos $i,\, i+1,\, \ldots,\, i+m-1$. La Tabla~\ref{tab:kernelA}
+    muestra el reparto para $m = 4$ y \texttt{block\_size} $= 8$.
+
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{lll}
+            \hline
+            \textbf{Bloque} & \textbf{Thread} & \textbf{Elementos} \\
+            \hline
+            0               & 0               & $0,1,2,3$          \\
+            0               & 1               & $4,5,6,7$          \\
+            0               & $\vdots$        & $\vdots$           \\
+            0               & 7               & $28,29,30,31$      \\
+            1               & 0               & $32,33,34,35$      \\
+            $\vdots$        & $\vdots$        & $\vdots$           \\
+            \hline
+        \end{tabular}
+        \caption{Reparto de elementos en el Kernel A con $m=4$, \texttt{block\_size}$=8$.}
+        \label{tab:kernelA}
+    \end{table}
+
+    \begin{lstlisting}[caption={Kernel \texttt{SumVectorA}: acceso consecutivo.}, label={lst:SumVectorA}]
+__global__ void SumVectorA(vector A, vector B, vector C,
+                            unsigned int n, int comp)
+{
+    int i = (blockIdx.x * blockDim.x + threadIdx.x) * comp;
+    for (int j = 0; j < comp && i + j < n; j++)
+        C[i + j] = A[i + j] + B[i + j];
+}
+    \end{lstlisting}
+
+    Como se puede observar en el Listado \ref{lst:SumVectorA}, la condición \texttt{i+j<n} garantiza
+    que el último thread no accede fuera de los límites del vector cuando $n$ no es múltiplo de
+    $m \cdot \texttt{block\_size}$.
+
+    \subsubsection*{Kernel \texttt{SumVectorB}: acceso a componentes separadas una distancia fija}
+
+    En este kernel cada thread procesa $m$ elementos separados por una distancia igual al número
+    de threads por bloque (\texttt{dist = block\_size}). El índice base del thread dentro del
+    segmento de su bloque es:
+    %
+    \begin{equation}
+        i = \texttt{blockIdx.x} \cdot \texttt{blockDim.x} \cdot m + \texttt{threadIdx.x}
+    \end{equation}
+    %
+    y los elementos accedidos son $i,\, i+\texttt{dist},\, i+2\cdot\texttt{dist},\,\ldots,\,
+        i+(m-1)\cdot\texttt{dist}$.
+    La Tabla~\ref{tab:kernelB} muestra el reparto para $m = 4$ y \texttt{block\_size} $= 4$.
+
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{lll}
+            \hline
+            \textbf{Bloque} & \textbf{Thread} & \textbf{Elementos} \\
+            \hline
+            0               & 0               & $0,4,8,12$         \\
+            0               & 1               & $1,5,9,13$         \\
+            0               & 2               & $2,6,10,14$        \\
+            0               & 3               & $3,7,11,15$        \\
+            1               & 0               & $16,20,24,28$      \\
+            $\vdots$        & $\vdots$        & $\vdots$           \\
+            \hline
+        \end{tabular}
+        \caption{Reparto de elementos en el Kernel B con $m=4$, \texttt{block\_size}$=4$.}
+        \label{tab:kernelB}
+    \end{table}
+
+    \begin{lstlisting}[caption={Kernel \texttt{SumVectorB}: acceso con saltos.}, label={lst:SumVectorB}]
+__global__ void SumVectorB(vector A, vector B, vector C,
+                            unsigned int n, int comp, int dist)
+{
+    int i = blockIdx.x * blockDim.x * comp + threadIdx.x;
+    if (i >= n) return;
+    for (int j = 0; j < comp; j++) {
+        int idx = i + j * dist;
+        if (idx < n)
+            C[idx] = A[idx] + B[idx];
+    }
+}
+    \end{lstlisting}
+
+    Como se observa en el Listado \ref{lst:SumVectorB}, dentro de cada bloque, los threads acceden a
+    posiciones contiguas en cada iteración $j$ (threads $0, 1, \ldots, \texttt{block\_size}-1$
+    acceden a $i, i+1, \ldots$ con $i$ fijo para la iteración), lo que tiene implicaciones sobre la
+    coalescencia que se analizan en el Ejercicio~2.
+
+    \subsubsection*{Verificación de la corrección}
+
+    Se verificó el funcionamiento de ambos kernels con distintos valores de $n$ y $m$. Para
+    vectores pequeños se usó el modo de depuración (\texttt{debug=1}), que imprime los vectores
+    de entrada y el resultado, permitiendo comprobar manualmente que $C[i] = A[i] + B[i]$.
+    Para vectores grandes se comparó el resultado del kernel con el de la versión secuencial,
+    obteniendo resultados idénticos en todos los casos probados.
+
+    A modo de ejemplo, la Tabla~\ref{tab:verificacion} muestra una ejecución con $n=32$, $m=4$,
+    \texttt{block\_size}$=8$, kernel A.
+
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{l *{11}{r}}
+            \toprule
+                    & \multicolumn{11}{c}{\textit{Índice}}                                                                  \\
+            \cmidrule(l){2-12}
+                    & $0$                                  & $1$ & $2$ & $3$ & $4$ & $5$ & $6$ & $7$ & $8$ & $9$ & $\cdots$ \\
+            \midrule
+            $A$     & 6                                    & 8   & 2   & 1   & 6   & 0   & 5   & 4   & 1   & 0   & $\cdots$ \\
+            $B$     & 7                                    & 3   & 5   & 4   & 3   & 1   & 0   & 4   & 1   & 2   & $\cdots$ \\
+            $C=A+B$ & 13                                   & 11  & 7   & 5   & 9   & 1   & 5   & 8   & 2   & 2   & $\cdots$ \\
+            \bottomrule
+        \end{tabular}
+        \caption{Ejemplo de verificación: $n=32$, $m=4$, \texttt{block\_size}$=8$, kernel A.}
+        \label{tab:verificacion}
+    \end{table}
+
 \end{exercise}
 
 \begin{exercise}{2}
@@ -51,6 +208,93 @@
     razonar sobre cuál de los kernels tendrá mejor rendimiento. El análisis se debe hacer teniendo
     en cuenta el valor de $m$, considerando diferentes valores de $m$ (desde pequeños a grandes, por
     ejemplo).
+
+    \begin{center}
+        \noindent\rule{4cm}{0.2pt}
+    \end{center}
+
+    En arquitecturas CUDA, un \textit{warp} agrupa 32 threads que ejecutan la misma instrucción
+    simultáneamente. Cuando esos 32 threads acceden a posiciones de memoria contiguas y alineadas,
+    la GPU los atiende con una única transacción de memoria (\textit{acceso coalescente}). Si en
+    cambio los accesos están separados por un salto (\textit{stride}), se necesitan múltiples
+    transacciones, lo que penaliza el rendimiento.
+
+    \subsubsection*{Kernel \texttt{SumVectorA}: coalescencia y localidad}
+
+    Cada thread tiene un identificador global $t = \texttt{blockIdx.x} \cdot \texttt{blockDim.x}
+        + \texttt{threadIdx.x}$. En la iteración $j$ del bucle interno, el thread $t$ accede al índice:
+    %
+    \begin{equation}
+        \text{idx}_A(t,j) = t \cdot m + j
+    \end{equation}
+    %
+    Dos threads consecutivos del mismo warp, $t$ y $t+1$, acceden en la misma iteración $j$ a los
+    índices $t \cdot m + j$ y $(t+1) \cdot m + j$, cuya distancia es $m$. Por tanto, el
+    \textbf{stride entre threads es $m$}:
+
+    \begin{itemize}
+        \item \textbf{$m = 1$}: los 32 threads del warp acceden a posiciones $t, t+1, \ldots, t+31$,
+              completamente contiguas. El acceso es \textbf{coalescente}.
+        \item \textbf{$m > 1$}: la distancia entre accesos es $m$ elementos, de modo que el warp
+              necesita hasta $\min(m, 32)$ transacciones de memoria por iteración en lugar de una.
+              El acceso es \textbf{no coalescente}.
+    \end{itemize}
+
+    En cuanto a la localidad, cada thread individual accede a $m$ posiciones contiguas, lo que
+    proporciona buena \textit{localidad espacial por thread}; sin embargo, a nivel de warp este
+    beneficio desaparece para $m > 1$ por el problema de coalescencia descrito.
+
+    \subsubsection*{Kernel \texttt{SumVectorB}: coalescencia y localidad}
+
+    El índice base del thread con identificador local $\texttt{threadIdx.x} = t$ en el bloque
+    $b = \texttt{blockIdx.x}$ es $i = b \cdot \texttt{blockDim.x} \cdot m + t$. En la iteración
+    $j$, dicho thread accede al índice:
+    %
+    \begin{equation}
+        \text{idx}_B(t,j) = b \cdot \texttt{blockDim.x} \cdot m + t + j \cdot \texttt{blockDim.x}
+    \end{equation}
+    %
+    Dos threads consecutivos del warp, $t$ y $t+1$, acceden en la misma iteración $j$ a los índices
+    $(\ldots + t + j \cdot \texttt{blockDim.x})$ y $(\ldots + t+1 + j \cdot \texttt{blockDim.x})$,
+    cuya distancia es siempre $1$. Por tanto, \textbf{el acceso es coalescente para cualquier valor
+        de $m$}.
+
+    La contrapartida es que cada thread individual accede a posiciones separadas por el valor de
+    \texttt{blockDim.x} elementos, lo que implica \textit{escasa localidad espacial por thread}.
+    Sin embargo, dado que la coalescencia a nivel de warp está garantizada, este efecto no introduce
+    penalización adicional en el ancho de banda de memoria.
+
+    \subsubsection*{Predicción de rendimiento}
+
+    La Tabla~\ref{tab:coalescencia} resume el análisis para los valores de $m$ considerados en el
+    Ejercicio~3; esto es, $m \in \{1, 64, 256\}$.
+
+    \begin{table}[h]
+        \centering
+        \begin{tabular}{ccccc}
+            \toprule
+            $m$   & \multicolumn{2}{c}{\textbf{Kernel A}} & \multicolumn{2}{c}{\textbf{Kernel B}}                                \\
+            \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+                  & Stride en warp                        & Coalescente                           & Stride en warp & Coalescente \\
+            \midrule
+            $1$   & $1$                                   & Sí                                    & $1$            & Sí          \\
+            $64$  & $64$                                  & No                                    & $1$            & Sí          \\
+            $256$ & $256$                                 & No                                    & $1$            & Sí          \\
+            \bottomrule
+        \end{tabular}
+        \caption{Coalescencia de los accesos a memoria en función de $m$.}
+        \label{tab:coalescencia}
+    \end{table}
+
+    Para $m = 1$ ambos kernels son equivalentes: los accesos son idénticos (cada thread procesa
+    un único elemento) y la coalescencia es perfecta en los dos casos.
+
+    Para $m > 1$, el Kernel A genera un patrón de acceso con stride $m$, lo que incrementa el número
+    de transacciones de memoria por warp de forma proporcional a $m$ (hasta el límite de 32). El
+    Kernel B mantiene accesos coalescentes en todas sus iteraciones, por lo que su consumo de ancho
+    de banda es óptimo independientemente de $m$. En consecuencia, se espera que el Kernel B
+    \textbf{supere} al Kernel A en rendimiento para $m > 1$, con una brecha que se amplía a medida
+    que $m$ crece.
 \end{exercise}
 
 \begin{exercise}{3}
@@ -74,6 +318,12 @@
 
     Para comprender los resultados que se obtienen, se deben observar también los accesos a memoria,
     para lo cual se usará la aplicación \textit{ncu} de NVIDIA.
+
+    \begin{center}
+        \noindent\rule{4cm}{0.2pt}
+    \end{center}
+
+
 \end{exercise}
 
 \end{document}
