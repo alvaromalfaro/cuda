@@ -1,6 +1,5 @@
 .venv
 cuda-samples
-results
 main.aux
 main.log
 main.out
