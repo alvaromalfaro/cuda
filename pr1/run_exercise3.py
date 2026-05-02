@@ -234,225 +234,10 @@ def _decorate(ax, title, ylabel="Time (s)"):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Plot 1 — Kernel A vs B vs Sequential
-#   For each (comp, block_size): left = kernel time, right = total time
-# ─────────────────────────────────────────────────────────────────────────────
-def plot_comparison(rows):
-    out = PLOTS / "01_comparison"
-    out.mkdir(parents=True, exist_ok=True)
-
-    avg_kt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
-    avg_tt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "total_time")
-    seq_tt = avg_by([r for r in rows if r["kernel"]
-                    == "seq"], ["n"], "total_time")
-
-    for comp in COMP_VALUES:
-        for bs in BLOCK_SIZES:
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-            fig.suptitle(
-                f"Kernel A vs B vs Sequential — m={comp}, threads/block={bs}",
-                fontsize=10,
-            )
-
-            for ax, avg, include_seq, title in [
-                (ax1, avg_kt, False, "Kernel time"),
-                (ax2, avg_tt, True,  "Total time"),
-            ]:
-                for k in KERNELS:
-                    pts = [(n, avg[(k, n, comp, bs)]) for n in N_VALUES
-                           if (k, n, comp, bs) in avg]
-                    if pts:
-                        xs, ys = zip(*pts)
-                        ax.plot(xs, ys, "o-", color=KERNEL_COLOR[k],
-                                label=KERNEL_LABEL[k])
-                if include_seq:
-                    pts = [(n, seq_tt[(n,)])
-                           for n in N_VALUES if (n,) in seq_tt]
-                    if pts:
-                        xs, ys = zip(*pts)
-                        ax.plot(xs, ys, "s--", color=KERNEL_COLOR["seq"],
-                                label=KERNEL_LABEL["seq"])
-                _decorate(ax, title)
-
-            fig.tight_layout()
-            fig.savefig(out / f"m{comp}_bs{bs}.png")
-            plt.close(fig)
-
-    print(f"  [01] Comparison plots → {out}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot 2 — Effect of threads/block
-#   For each (kernel, comp): one line per block_size, kernel time vs n
-# ─────────────────────────────────────────────────────────────────────────────
-def plot_blocksize_effect(rows):
-    out = PLOTS / "02_blocksize_effect"
-    out.mkdir(parents=True, exist_ok=True)
-
-    avg_kt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
-    colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(BLOCK_SIZES)))
-
-    for kernel in KERNELS:
-        for comp in COMP_VALUES:
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
-            for i, bs in enumerate(BLOCK_SIZES):
-                pts = [(n, avg_kt[(kernel, n, comp, bs)]) for n in N_VALUES
-                       if (kernel, n, comp, bs) in avg_kt]
-                if pts:
-                    xs, ys = zip(*pts)
-                    ax.plot(xs, ys, "o-", color=colors[i], label=f"bs={bs}")
-            _decorate(ax,
-                      f"Effect of threads/block — Kernel {kernel.upper()}, m={comp}",
-                      ylabel="Kernel time (s)")
-            fig.tight_layout()
-            fig.savefig(out / f"kernel{kernel}_m{comp}.png")
-            plt.close(fig)
-
-    print(f"  [02] Block-size effect plots → {out}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot 3 — Effect of m (comp)
-#   For each (kernel, block_size): one line per comp value, kernel time vs n
-# ─────────────────────────────────────────────────────────────────────────────
-def plot_comp_effect(rows):
-    out = PLOTS / "03_comp_effect"
-    out.mkdir(parents=True, exist_ok=True)
-
-    avg_kt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
-    colors = ["#e41a1c", "#377eb8", "#4daf4a"]
-
-    for kernel in KERNELS:
-        for bs in BLOCK_SIZES:
-            fig, ax = plt.subplots(figsize=(6.5, 4.5))
-            for i, comp in enumerate(COMP_VALUES):
-                pts = [(n, avg_kt[(kernel, n, comp, bs)]) for n in N_VALUES
-                       if (kernel, n, comp, bs) in avg_kt]
-                if pts:
-                    xs, ys = zip(*pts)
-                    ax.plot(xs, ys, "o-", color=colors[i], label=f"m={comp}")
-            _decorate(ax,
-                      f"Effect of m — Kernel {kernel.upper()}, threads/block={bs}",
-                      ylabel="Kernel time (s)")
-            fig.tight_layout()
-            fig.savefig(out / f"kernel{kernel}_bs{bs}.png")
-            plt.close(fig)
-
-    print(f"  [03] Comp effect plots → {out}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot 4 — Speedup over sequential (total time)
-#   For each comp: subplot per kernel, one line per block_size
-# ─────────────────────────────────────────────────────────────────────────────
-def plot_speedup(rows):
-    out = PLOTS / "04_speedup"
-    out.mkdir(parents=True, exist_ok=True)
-
-    avg_tt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "total_time")
-    seq_tt = avg_by([r for r in rows if r["kernel"]
-                    == "seq"], ["n"], "total_time")
-    colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(BLOCK_SIZES)))
-
-    for comp in COMP_VALUES:
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-        fig.suptitle(f"GPU speedup over sequential — m={comp}", fontsize=10)
-
-        for ax, kernel in zip(axes, KERNELS):
-            for i, bs in enumerate(BLOCK_SIZES):
-                pts = []
-                for n in N_VALUES:
-                    gpu = avg_tt.get((kernel, n, comp, bs))
-                    seq = seq_tt.get((n,))
-                    if gpu and seq and gpu > 0:
-                        pts.append((n, seq / gpu))
-                if pts:
-                    xs, ys = zip(*pts)
-                    ax.plot(xs, ys, "o-", color=colors[i], label=f"bs={bs}")
-
-            ax.axhline(y=1, color="k", linestyle="--", linewidth=0.8,
-                       alpha=0.6, label="Seq baseline")
-            ax.set_title(f"Kernel {kernel.upper()}", fontsize=9)
-            ax.set_xlabel("Vector size n")
-            ax.set_ylabel("Speedup")
-            ax.set_xscale("log", base=2)
-            ax.grid(True, alpha=0.25, linestyle="--")
-            ax.xaxis.set_major_formatter(
-                ticker.FuncFormatter(lambda v, _: n_label(v) if v > 0 else "")
-            )
-            ax.legend(fontsize=7)
-
-        fig.tight_layout()
-        fig.savefig(out / f"speedup_m{comp}.png")
-        plt.close(fig)
-
-    print(f"  [04] Speedup plots → {out}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot 5 — Best configuration summary
-#   For each kernel: kernel time vs n for the config with lowest avg kernel time,
-#   with all three comp values shown. Useful as a single report figure.
-# ─────────────────────────────────────────────────────────────────────────────
-def plot_best_config(rows):
-    out = PLOTS / "05_best_config"
-    out.mkdir(parents=True, exist_ok=True)
-
-    avg_kt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
-    seq_tt = avg_by([r for r in rows if r["kernel"]
-                    == "seq"], ["n"], "total_time")
-    colors = ["#e41a1c", "#377eb8", "#4daf4a"]
-
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    fig.suptitle(
-        "Best configuration per kernel (lowest avg kernel time)", fontsize=10)
-
-    for ax, kernel in zip(axes, KERNELS):
-        # Find (comp, bs) with lowest average kernel time across all n
-        best, best_key = float("inf"), None
-        for comp in COMP_VALUES:
-            for bs in BLOCK_SIZES:
-                vals = [avg_kt.get((kernel, n, comp, bs)) for n in N_VALUES]
-                vals = [v for v in vals if v is not None]
-                if vals:
-                    mean = sum(vals) / len(vals)
-                    if mean < best:
-                        best, best_key = mean, (comp, bs)
-
-        if best_key:
-            comp_b, bs_b = best_key
-            ax.set_title(
-                f"Kernel {kernel.upper()} — best: m={comp_b}, bs={bs_b}", fontsize=9
-            )
-
-        for i, comp in enumerate(COMP_VALUES):
-            bs = best_key[1] if best_key else BLOCK_SIZES[0]
-            pts = [(n, avg_kt[(kernel, n, comp, bs)]) for n in N_VALUES
-                   if (kernel, n, comp, bs) in avg_kt]
-            if pts:
-                xs, ys = zip(*pts)
-                ax.plot(xs, ys, "o-", color=colors[i], label=f"m={comp}")
-
-        # Sequential reference
-        pts = [(n, seq_tt[(n,)]) for n in N_VALUES if (n,) in seq_tt]
-        if pts:
-            xs, ys = zip(*pts)
-            ax.plot(xs, ys, "s--",
-                    color=KERNEL_COLOR["seq"], label="Sequential")
-
-        _decorate(ax, ax.get_title(), ylabel="Time (s)")
-
-    fig.tight_layout()
-    fig.savefig(out / "best_config.png")
-    plt.close(fig)
-    print(f"  [05] Best-config summary → {out}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot 6 — Summary (3 consolidated figures)
+# Plots — Summary (4 consolidated figures)
 # ─────────────────────────────────────────────────────────────────────────────
 def plot_summary(rows):
-    out = PLOTS / "06_summary"
+    out = PLOTS
     out.mkdir(parents=True, exist_ok=True)
 
     avg_kt = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
@@ -461,8 +246,7 @@ def plot_summary(rows):
                     == "seq"], ["n"], "total_time")
     bs_colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(BLOCK_SIZES)))
 
-    # ── Figure 1: time scaling ────────────────────────────────────────────────
-    # 2 rows (kernel A/B) x 3 cols (m=1,64,256). Lines = block_sizes + seq ref.
+    # ── time_scaling.png: 2×3 grid (kernel × m), lines = block_sizes + seq ─────
     fig, axes = plt.subplots(2, 3, figsize=(14, 8), sharex=True)
     fig.suptitle("Kernel time vs n — all configurations", fontsize=11)
 
@@ -476,7 +260,6 @@ def plot_summary(rows):
                     xs, ys = zip(*pts)
                     ax.plot(xs, ys, "o-", color=bs_colors[i],
                             linewidth=1.2, label=f"bs={bs}")
-            # Sequential reference (total time, dashed grey)
             pts = [(n, seq_tt[(n,)]) for n in N_VALUES if (n,) in seq_tt]
             if pts:
                 xs, ys = zip(*pts)
@@ -498,10 +281,8 @@ def plot_summary(rows):
     fig.savefig(out / "time_scaling.png")
     plt.close(fig)
 
-    # ── Figure 2: configuration heatmaps ─────────────────────────────────────
-    # 2 rows (kernel A/B) x 2 cols (kernel time / total time).
-    # Each cell: heatmap of comp (rows) x block_size (cols), avg over large n.
-    large_n = N_VALUES[len(N_VALUES) // 2:]   # upper half of n values
+    # ── config_heatmap.png: comp × block_size heatmap, averaged over large n ────
+    large_n = N_VALUES[len(N_VALUES) // 2:]
     fig, axes = plt.subplots(2, 2, figsize=(10, 7))
     fig.suptitle("Average time heatmap (comp x threads/block)", fontsize=11)
 
@@ -524,7 +305,6 @@ def plot_summary(rows):
             ax.set_xlabel("Threads per block")
             ax.set_ylabel("m (comp)")
             ax.set_title(f"Kernel {kernel.upper()} — {metric}", fontsize=9)
-            # Annotate cells with the value
             for ci in range(len(COMP_VALUES)):
                 for bi in range(len(BLOCK_SIZES)):
                     v = data[ci, bi]
@@ -538,26 +318,28 @@ def plot_summary(rows):
     fig.savefig(out / "config_heatmap.png")
     plt.close(fig)
 
-    # ── Figure 3: speedup A vs B side by side ────────────────────────────────
-    # Panels: one per kernel. Lines = block_sizes. Uses best comp per kernel.
-    # Find best comp for each kernel (lowest avg total time over large n)
-    best_comp = {}
+    # ── speedup.png: 1×3 panels by m, A vs B at best block_size per config ─────
+    best_bs_tt = {}
     for kernel in KERNELS:
-        best, best_c = float("inf"), COMP_VALUES[0]
         for comp in COMP_VALUES:
-            vals = [avg_tt.get((kernel, n, comp, bs))
-                    for n in large_n for bs in BLOCK_SIZES]
-            vals = [v for v in vals if v is not None]
-            if vals and (m := sum(vals) / len(vals)) < best:
-                best, best_c = m, comp
-        best_comp[kernel] = best_c
+            best, best_b = float("inf"), BLOCK_SIZES[0]
+            for bs in BLOCK_SIZES:
+                vals = [avg_tt.get((kernel, n, comp, bs)) for n in large_n]
+                vals = [v for v in vals if v is not None]
+                if vals:
+                    mean = sum(vals) / len(vals)
+                    if mean < best:
+                        best, best_b = mean, bs
+            best_bs_tt[(kernel, comp)] = best_b
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    fig.suptitle("Speedup over sequential (total time)", fontsize=11)
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+    fig.suptitle("Speedup over sequential (total time, best threads/block per config)",
+                 fontsize=11)
 
-    for ax, kernel in zip(axes, KERNELS):
-        comp = best_comp[kernel]
-        for i, bs in enumerate(BLOCK_SIZES):
+    for col_i, comp in enumerate(COMP_VALUES):
+        ax = axes[col_i]
+        for kernel in KERNELS:
+            bs = best_bs_tt[(kernel, comp)]
             pts = []
             for n in N_VALUES:
                 gpu = avg_tt.get((kernel, n, comp, bs))
@@ -566,10 +348,11 @@ def plot_summary(rows):
                     pts.append((n, seq / gpu))
             if pts:
                 xs, ys = zip(*pts)
-                ax.plot(xs, ys, "o-", color=bs_colors[i], label=f"bs={bs}")
+                ax.plot(xs, ys, "o-", color=KERNEL_COLOR[kernel],
+                        label=f"{KERNEL_LABEL[kernel]} (bs={bs})")
         ax.axhline(y=1, color="k", linestyle="--", linewidth=0.8,
                    alpha=0.5, label="Seq baseline")
-        ax.set_title(f"Kernel {kernel.upper()} (m={comp})", fontsize=9)
+        ax.set_title(f"m={comp}", fontsize=9)
         ax.set_xlabel("Vector size n")
         ax.set_ylabel("Speedup")
         ax.set_xscale("log", base=2)
@@ -582,7 +365,41 @@ def plot_summary(rows):
     fig.savefig(out / "speedup.png")
     plt.close(fig)
 
-    print(f"  [06] Summary figures → {out}")
+    # ── ab_comparison.png: 1×3 panels by m, A vs B kernel time at best bs ──────
+    avg_kt_ab = avg_by(rows, ["kernel", "n", "comp", "block_size"], "kernel_time")
+    best_bs = {}
+    for kernel in KERNELS:
+        for comp in COMP_VALUES:
+            best, best_b = float("inf"), BLOCK_SIZES[0]
+            for bs in BLOCK_SIZES:
+                vals = [avg_kt_ab.get((kernel, n, comp, bs)) for n in N_VALUES]
+                vals = [v for v in vals if v is not None]
+                if vals:
+                    mean = sum(vals) / len(vals)
+                    if mean < best:
+                        best, best_b = mean, bs
+            best_bs[(kernel, comp)] = best_b
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+    fig.suptitle("Kernel A vs B — kernel time (best threads/block per config)", fontsize=11)
+
+    for col_i, comp in enumerate(COMP_VALUES):
+        ax = axes[col_i]
+        for kernel in KERNELS:
+            bs = best_bs[(kernel, comp)]
+            pts = [(n, avg_kt_ab[(kernel, n, comp, bs)]) for n in N_VALUES
+                   if (kernel, n, comp, bs) in avg_kt_ab]
+            if pts:
+                xs, ys = zip(*pts)
+                ax.plot(xs, ys, "o-", color=KERNEL_COLOR[kernel],
+                        label=f"{KERNEL_LABEL[kernel]} (bs={bs})")
+        _decorate(ax, f"m={comp}", ylabel="Kernel time (s)")
+
+    fig.tight_layout()
+    fig.savefig(out / "ab_comparison.png")
+    plt.close(fig)
+
+    print(f"  Plots saved → {out}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -611,11 +428,6 @@ def main():
 
     print("\nGenerating plots …")
     PLOTS.mkdir(parents=True, exist_ok=True)
-    plot_comparison(rows)
-    plot_blocksize_effect(rows)
-    plot_comp_effect(rows)
-    plot_speedup(rows)
-    plot_best_config(rows)
     plot_summary(rows)
     print(f"\nAll plots saved under {PLOTS}/")
 
